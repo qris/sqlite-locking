@@ -3,9 +3,10 @@
 import importlib
 import os
 import sqlite3
-import sqlite_locking
 
+import sqlite_locking
 from sqlite_locking.python_module import sqlite3_enable_load_extension
+
 
 def load_extension(db: sqlite3.Connection, library_name: str):
     """

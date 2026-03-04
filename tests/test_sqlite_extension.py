@@ -1,24 +1,26 @@
 """Tests for sqlite_locking.sqlite_extension."""
 
-from contextlib import closing
 import logging
 import os
 import sqlite3
-
-from multiprocessing import Event, Process
 import time
+from contextlib import closing
+from multiprocessing import Event, Process
 
-from more_itertools import one
 import pytest
+from more_itertools import one
+
 from sqlite_locking.enums import SqliteLockState, TransactionState
 from sqlite_locking.extension import load_extension
 
 logger = logging.getLogger(__file__)
 
+
 @pytest.fixture
 def db_path(tmp_path):
     """Create a temporary database without opening it."""
     return os.path.join(tmp_path, 'database.tmp')
+
 
 @pytest.fixture
 def db_extension(db_path):
@@ -26,6 +28,7 @@ def db_extension(db_path):
     with sqlite3.connect(db_path) as db:
         load_extension(db, 'sqlite_extension')
         yield db
+
 
 def test_sqlite3_txn_and_lock_state(db_extension, tmp_path):
     """
@@ -306,4 +309,3 @@ def test_sqlite3_check_reserved_lock_multiprocess(wal_mode, db_extension, db_pat
     finally:
         db_opener_worker.terminate()
         db_opener_worker.join()
-

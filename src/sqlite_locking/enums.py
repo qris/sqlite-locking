@@ -1,10 +1,10 @@
 """Enumerations to make Python code more readable."""
 
-from enum import Enum, IntEnum
 import sqlite3
+from enum import Enum, IntEnum
 from typing import Optional
 
-from sqlite_locking.python_module import sqlite3_txn_state, sqlite3_db_status
+from sqlite_locking.python_module import sqlite3_db_status, sqlite3_txn_state
 
 
 class TransactionState(IntEnum):

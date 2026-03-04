@@ -5,15 +5,18 @@ import os
 import sqlite3
 
 import pytest
+
 from sqlite_locking.enums import SqliteDatabaseStatus
 from sqlite_locking.extension import load_extension
 
 logger = logging.getLogger(__file__)
 
+
 @pytest.fixture
 def db_path(tmp_path):
     """Create a temporary database without opening it."""
     return os.path.join(tmp_path, 'database.tmp')
+
 
 @pytest.fixture
 def db_extension(db_path):
@@ -21,6 +24,7 @@ def db_extension(db_path):
     with sqlite3.connect(db_path) as db:
         load_extension(db, 'sqlite_extension')
         yield db
+
 
 def test_query_cache_spills(db_extension, db_path):
     """
