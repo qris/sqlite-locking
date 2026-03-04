@@ -1,0 +1,28 @@
+[project]
+name = "sqlite_locking"
+version = "20260304-1"
+description = "Python native extensions used for low-level SQLite lock debugging."
+authors = [
+    {name = "Chris Wilson", email = "chris+github@qwirx.com"},
+]
+dependencies = ["more_itertools"]
+requires-python = ">=3.10"
+readme = "README.md"
+license = "BSD-3-Clause"
+
+[build-system]
+# pybind 3.0 requires GCC >= 9 which is not possible on all supported platforms:
+requires = ["setuptools>=61", "pybind11<3.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pdm]
+distribution = true
+
+[tool.setuptools]
+ext-modules = [
+  {name = "sqlite_locking.sqlite_extension", sources = ["src/sqlite_locking/sqlite_extension.c"]},
+  {name = "sqlite_locking.vfsstat", sources = ["src/sqlite_locking/vfsstat.c"]},
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
