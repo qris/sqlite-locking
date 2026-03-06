@@ -1,19 +1,24 @@
 [project]
-name = "sqlite_locking"
-version = "20260304-1"
-description = "Python native extensions used for low-level SQLite lock debugging."
 authors = [
-    {name = "Chris Wilson", email = "chris+github@qwirx.com"},
+  {name = "Chris Wilson", email = "chris+github@qwirx.com"},
 ]
 dependencies = ["more_itertools", "ruff"]
-requires-python = ">=3.10"
-readme = "README.md"
+description = "Python native extensions used for low-level SQLite lock debugging."
 license = "BSD-3-Clause"
+name = "sqlite_locking"
+readme = "README.md"
+requires-python = ">=3.10"
+version = "20260306-1"
+
+[project.optional-dependencies]
+dev = [
+  "pybind11>=3.0.2",
+]
 
 [build-system]
 # pybind 3.0 requires GCC >= 9 which is not possible on all supported platforms:
-requires = ["setuptools>=61", "pybind11<3.0"]
 build-backend = "setuptools.build_meta"
+requires = ["setuptools>=61", "pybind11<3.0"]
 
 [tool.pdm]
 distribution = true
@@ -35,43 +40,45 @@ preview = true
 
 [tool.ruff.lint]
 extend-select = [
-    # Add the `line-too-long` rule to the enforced rule set. By default, Ruff
-    # omits rules that overlap with the use of a formatter, like Black, but we
-    # can override this behavior by explicitly adding the rule:
-    "E501",  # line-too-long
-]
-select = [
-    "B",    # flake8-bugbear
-    "COM",  # flake8-commas
-    "D",    # pydocstyle
-    # "DOC",  # pydoclint
-    "E",    # pycodestyle errors
-    "F",    # Pyflakes
-    "FIX",  # flake8-fixme
-    "I",    # isort
-    "N",    # pep8-naming
-    "NPY",  # NumPy-specific rules
-    "PD",   # pandas-vet
-    "PIE",  # flake8-pie
-    "RET",  # flake8-return
-    "RSE",  # flake8-raise
-    "SIM107",  # return-in-try-except-finally
-    "SLOT",  # flake8-slots
-    "T100",  # debugger
-    "TID",  # flake8-tidy-imports
-    "W",    # pycodestyle warnings
+  # Add the `line-too-long` rule to the enforced rule set. By default, Ruff
+  # omits rules that overlap with the use of a formatter, like Black, but we
+  # can override this behavior by explicitly adding the rule:
+  "E501", # line-too-long
 ]
 ignore = [
-    "D105",  # undocumented-magic-method
-    "D212",  # multi-line-summary-first-line
-    "D200",  # unnecessary-multiline-docstring
-    "D401",  # non-imperative-mood
-    "E221",  # multiple-spaces-before-operator
-    "E241",  # multiple-spaces-after-comma
-    "E272",  # multiple-spaces-before-keyword
-    "PD011",  # pandas-use-of-dot-values - confused by non-Pandas DataFrames!
-    "RET505",  # superfluous-else-return - TODO reinstate, but causes large code churn
+  "D105", # undocumented-magic-method
+  "D212", # multi-line-summary-first-line
+  "D200", # unnecessary-multiline-docstring
+  "D401", # non-imperative-mood
+  "E221", # multiple-spaces-before-operator
+  "E241", # multiple-spaces-after-comma
+  "E272", # multiple-spaces-before-keyword
+  "PD011", # pandas-use-of-dot-values - confused by non-Pandas DataFrames!
+  "RET505", # superfluous-else-return - TODO reinstate, but causes large code churn
 ]
+select = [
+  "B", # flake8-bugbear
+  "COM", # flake8-commas
+  "D", # pydocstyle  # "DOC",  # pydoclint
+  "E", # pycodestyle errors
+  "F", # Pyflakes
+  "FIX", # flake8-fixme
+  "I", # isort
+  "N", # pep8-naming
+  "NPY", # NumPy-specific rules
+  "PD", # pandas-vet
+  "PIE", # flake8-pie
+  "RET", # flake8-return
+  "RSE", # flake8-raise
+  "SIM107", # return-in-try-except-finally
+  "SLOT", # flake8-slots
+  "T100", # debugger
+  "TID", # flake8-tidy-imports
+  "W", # pycodestyle warnings
+]
+
+[tool.ruff.lint.isort]
+known-third-party = ["sqlite_locking"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "tools".msg = "Do not import from tools, these are not libraries!"

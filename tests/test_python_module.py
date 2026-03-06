@@ -5,9 +5,9 @@ import os
 import sqlite3
 
 import pytest
-
 from sqlite_locking.enums import SqliteDatabaseStatus
 from sqlite_locking.extension import load_extension
+from sqlite_locking.python_module import sqlite3_errorlog_init, sqlite3_errorlog_read_logs, sqlite3_log
 
 logger = logging.getLogger(__file__)
 
@@ -19,6 +19,13 @@ def db_path(tmp_path):
 
 
 @pytest.fixture
+def db(db_path):
+    """Test fixture that yields a temporary sqlite3.Connection."""
+    with sqlite3.connect(db_path) as db:
+        yield db
+
+
+@pytest.fixture
 def db_extension(db_path):
     """Test fixture that yields a sqlite3.Connection with sqlite_extension loaded."""
     with sqlite3.connect(db_path) as db:
@@ -26,13 +33,12 @@ def db_extension(db_path):
         yield db
 
 
-def test_query_cache_spills(db_extension, db_path):
+def test_query_cache_spills(db):
     """
     Test that our sqlite3_db_status wrapper can be used to count cache spills.
 
     This is based on cachespill.test in the SQLite source.
     """
-    db = db_extension
     db.execute("PRAGMA auto_vacuum = 0").close()
     # db.execute("PRAGMA page_size = 1024").close()  # doesn't change page_size
     db.execute("PRAGMA cache_size = -100").close()  # limit to 100k
@@ -47,3 +53,16 @@ def test_query_cache_spills(db_extension, db_path):
     # first value is result code (0 = SQLITE_OK), second value is number of
     # cache spills, which could vary with SQLite version:
     assert result == 31
+
+
+def test_errorlog(db):
+    """
+    Test that our sqlite error log wrapper works.
+
+    This is a Python interface to the SQLite "error logging callback". See
+    <https://sqlite.org/errlog.html> for details.
+    """
+    sqlite3_errorlog_init()
+    assert sqlite3_errorlog_read_logs() == []
+    sqlite3_log(42, "hello world")
+    assert sqlite3_errorlog_read_logs() == [(42, "hello world")]

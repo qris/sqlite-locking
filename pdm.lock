@@ -2,10 +2,10 @@
 # It is not intended for manual editing.
 
 [metadata]
-groups = ["default"]
+groups = ["default", "dev"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:1e374a866cd0114b546a5e50b30f0114534d9c92e50c2ec48d2b325965be3957"
+content_hash = "sha256:2c3180380828417fe6d4e9c5a61a07f437842200f94d461214ea5bba41e55ac4"
 
 [[metadata.targets]]
 requires_python = ">=3.10"
@@ -19,6 +19,17 @@ groups = ["default"]
 files = [
     {file = "more_itertools-10.8.0-py3-none-any.whl", hash = "sha256:52d4362373dcf7c52546bc4af9a86ee7c4579df9a8dc268be0a2f949d376cc9b"},
     {file = "more_itertools-10.8.0.tar.gz", hash = "sha256:f638ddf8a1a0d134181275fb5d58b086ead7c6a72429ad725c67503f13ba30bd"},
+]
+
+[[package]]
+name = "pybind11"
+version = "3.0.2"
+requires_python = ">=3.8"
+summary = "Seamless operability between C++11 and Python"
+groups = ["dev"]
+files = [
+    {file = "pybind11-3.0.2-py3-none-any.whl", hash = "sha256:f8a6500548919cc33bcd220d5f984688326f574fa97f1107f2f4fdb4c6fb019f"},
+    {file = "pybind11-3.0.2.tar.gz", hash = "sha256:432f01aeb68e361a3a7fc7575c2c7f497595bf640f747acd909ff238dd766e06"},
 ]
 
 [[package]]
