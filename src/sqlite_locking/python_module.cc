@@ -147,6 +147,16 @@ void sqlite3_log_wrapper(int iErrCode, const char *zMsg)
     sqlite3_log(iErrCode, zMsg); // no varargs!
 }
 
+std::string sqlite3_vfs_default()
+{
+    /**
+     * Return the name of the default VFS.
+     */
+    sqlite3_vfs *default_vfs = sqlite3_vfs_find(NULL);
+    assert(default_vfs != NULL);
+    return default_vfs->zName;
+}
+
 PYBIND11_MODULE(python_module, m)
 {
     m.doc() = "Python native extensions used for low-level SQLite lock "
@@ -172,4 +182,6 @@ PYBIND11_MODULE(python_module, m)
         "Return and clear the contents of the global errorlog");
     m.def("sqlite3_log", &sqlite3_log_wrapper,
         "Write a message into the SQLite error log, for testing ONLY");
+    m.def("sqlite3_vfs_default", &sqlite3_vfs_default,
+        "Return the name of the default VFS");
 }
