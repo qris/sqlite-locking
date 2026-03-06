@@ -71,8 +71,13 @@ def test_errorlog(db):
     """
     sqlite3_errorlog_init()
     assert sqlite3_errorlog_read_logs() == []
+
     sqlite3_log(42, "hello world")
     assert sqlite3_errorlog_read_logs() == [(42, "hello world")]
+
+    with pytest.raises(sqlite3.OperationalError):
+        db.execute("INVALID SQL;")
+    assert sqlite3_errorlog_read_logs() == [(1, 'near "INVALID": syntax error in "INVALID SQL;"')]
 
 
 def test_vfstrace(db_path):
