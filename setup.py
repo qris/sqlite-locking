@@ -14,12 +14,9 @@ from setuptools import setup
 ext_modules = [
     Pybind11Extension(
         "sqlite_locking.python_module",
-        ["src/sqlite_locking/vfsstat.c",
-         "src/sqlite_locking/vfstrace.c",
-         "src/sqlite_locking/python_module.cc"],
-        headers=['src/sqlite_locking/*.h'],
-        extra_compile_args=['-std=c++11', '-Werror=return-type'],
-        libraries=['sqlite3'],
+        ["src/sqlite_locking/vfsstat.c", "src/sqlite_locking/vfstrace.c", "src/sqlite_locking/python_module.cc"],
+        extra_compile_args=["-std=c++11", "-Werror=return-type"],
+        libraries=["sqlite3"],
         # Example: passing in the version to the compiled code
         # define_macros=[("VERSION_INFO", __version__)],
     ),
