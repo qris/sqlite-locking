@@ -5,7 +5,7 @@
 groups = ["default", "dev"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:2c3180380828417fe6d4e9c5a61a07f437842200f94d461214ea5bba41e55ac4"
+content_hash = "sha256:5b5406f97fa5b17f8ae78a71998d349ace8b939ea8f1d50054b12ca89b370251"
 
 [[metadata.targets]]
 requires_python = ">=3.10"
@@ -57,4 +57,15 @@ files = [
     {file = "ruff-0.15.4-py3-none-win_amd64.whl", hash = "sha256:04196ad44f0df220c2ece5b0e959c2f37c777375ec744397d21d15b50a75264f"},
     {file = "ruff-0.15.4-py3-none-win_arm64.whl", hash = "sha256:60d5177e8cfc70e51b9c5fad936c634872a74209f934c1e79107d11787ad5453"},
     {file = "ruff-0.15.4.tar.gz", hash = "sha256:3412195319e42d634470cc97aa9803d07e9d5c9223b99bcb1518f0c725f26ae1"},
+]
+
+[[package]]
+name = "setuptools"
+version = "82.0.0"
+requires_python = ">=3.9"
+summary = "Easily download, build, install, upgrade, and uninstall Python packages"
+groups = ["dev"]
+files = [
+    {file = "setuptools-82.0.0-py3-none-any.whl", hash = "sha256:70b18734b607bd1da571d097d236cfcfacaf01de45717d59e6e04b96877532e0"},
+    {file = "setuptools-82.0.0.tar.gz", hash = "sha256:22e0a2d69474c6ae4feb01951cb69d515ed23728cf96d05513d36e42b62b37cb"},
 ]

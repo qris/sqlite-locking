@@ -12,6 +12,7 @@ version = "20260306-1"
 
 [project.optional-dependencies]
 dev = [
+  "setuptools>=61",
   "pybind11>=3.0.2",
 ]
 
