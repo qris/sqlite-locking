@@ -149,7 +149,17 @@ def test_sqlite3_db_config():
         assert not SqliteDBConfig.NO_CKPT_ON_CLOSE.set(db, False)
         assert not SqliteDBConfig.NO_CKPT_ON_CLOSE.get(db)
 
-        assert sqlite3_db_config(None, 42, -1) == (21, "Invalid connection")
-        assert sqlite3_db_config(None, 42, 0) == (21, "Invalid connection")
-        assert sqlite3_db_config(db, 42, -1) == (21, "Unknown or unsupported config 'op'")
-        assert sqlite3_db_config(db, 42, 0) == (21, "Unknown or unsupported config 'op'")
+        with pytest.raises(ValueError, match="Invalid connection or base Connection.__init__ not called"):
+            sqlite3_db_config(None, 42, -1)
+        with pytest.raises(ValueError, match="Invalid connection or base Connection.__init__ not called"):
+            sqlite3_db_config(None, 42, -1)
+        with pytest.raises(ValueError, match="Unknown or unsupported config 'op'"):
+            sqlite3_db_config(db, 42, -1)
+        with pytest.raises(ValueError, match="Unknown or unsupported config 'op'"):
+            sqlite3_db_config(db, 42, 0)
+
+    db.close()
+    with pytest.raises(ValueError, match="Cannot operate on a closed database"):
+        sqlite3_db_config(db, 42, -1)
+    with pytest.raises(ValueError, match="Cannot operate on a closed database"):
+        sqlite3_db_config(db, 42, 0)

@@ -121,14 +121,8 @@ class SqliteDBConfig(IntEnum):
 
     def get(self, db: sqlite3.Connection) -> bool:
         """Return the current setting of this config on the supplied database Connection."""
-        result = sqlite3_db_config(db, self.value, -1)
-        if result[0] != 0:
-            raise ValueError(f"sqlite3_db_config({db}, {self.value}) failed with rc={result[0]}")
-        return True if result[1] else False
+        return sqlite3_db_config(db, self.value, -1)
 
     def set(self, db: sqlite3.Connection, enable: bool) -> bool:
         """Enable or disable this config on the supplied database Connection."""
-        result = sqlite3_db_config(db, self.value, 1 if enable else 0)
-        if result[0] != 0:
-            raise ValueError(f"sqlite3_db_config({db}, {self.value}) failed with rc={result[0]}")
-        return True if result[1] else False
+        return sqlite3_db_config(db, self.value, 1 if enable else 0)

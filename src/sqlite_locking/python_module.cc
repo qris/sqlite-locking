@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <list>
+#include <sstream>
 #include <string>
 
 #include <pybind11/pybind11.h>
@@ -20,14 +21,19 @@ namespace py = pybind11;
  * Directly copied from CPython 3.12 cpython/Modules/_sqlite/connection.c.
  */
 
-static bool _check_thread(pysqlite_Connection *self)
+static void _check_thread(pysqlite_Connection *self)
 {
     if (self->check_same_thread) {
         if (PyThread_get_thread_ident() != self->thread_ident) {
-            return false;
+            std::ostringstream oss;
+            oss << "SQLite objects created in a thread can only be used in "
+                   "that "
+                   "same thread. The object was created in thread id "
+                << self->thread_ident << " and this is thread id "
+                << PyThread_get_thread_ident();
+            throw std::invalid_argument(oss.str());
         }
     }
-    return true;
 }
 
 /*
@@ -37,17 +43,15 @@ static bool _check_thread(pysqlite_Connection *self)
  *
  * Directly copied from CPython 3.12 cpython/Modules/_sqlite/connection.c.
  */
-static bool _check_connection(pysqlite_Connection *con)
+static void _check_connection(pysqlite_Connection *con)
 {
-    if (!con->initialized) {
-        return false;
+    if (!con || !con->initialized) {
+        throw std::invalid_argument(
+            "Invalid connection or base Connection.__init__ not called");
     }
 
     if (!con->db) {
-        return false;
-    }
-    else {
-        return true;
+        throw std::invalid_argument("Cannot operate on a closed database");
     }
 }
 
@@ -243,24 +247,21 @@ static inline bool is_int_config(const int op)
 }
 
 // Directly copied from CPython 3.12 cpython/Modules/_sqlite/connection.c:
-py::tuple sqlite3_db_config_wrapper(py::handle connection, int op, int enable)
+bool sqlite3_db_config_wrapper(py::handle connection, int op, int enable)
 {
     pysqlite_Connection *self = (pysqlite_Connection *)(connection.ptr());
-    if (!_check_thread(self) || !_check_connection(self)) {
-        return py::make_tuple(SQLITE_MISUSE, "Invalid connection");
-        ;
-    }
+    _check_thread(self);
+    _check_connection(self);
     if (!is_int_config(op)) {
-        return py::make_tuple(
-            SQLITE_MISUSE, "Unknown or unsupported config 'op'");
+        throw std::invalid_argument("Unknown or unsupported config 'op'");
     }
 
     int actual;
     int result = sqlite3_db_config(self->db, op, enable, &actual);
     if (result != SQLITE_OK) {
-        return py::make_tuple(result, "sqlite3_db_config failed");
+        throw std::runtime_error("sqlite3_db_config failed");
     }
-    return py::make_tuple(result, actual);
+    return bool(actual);
 }
 
 PYBIND11_MODULE(python_module, m)
