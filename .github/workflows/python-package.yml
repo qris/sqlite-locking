@@ -41,7 +41,3 @@ jobs:
         $GITHUB_WORKSPACE/.venv/bin/pytest -v
     - name: Test building package distributions for PyPI
       run: pdm build
-    - uses: actions/upload-artifact@v4
-      with:
-        path: |
-          dist/sqlite_locking-*.whl
