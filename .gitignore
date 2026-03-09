@@ -1,4 +1,6 @@
 .pdm-python
+build
+dist
 src/sqlite_locking.egg-info
 src/sqlite_locking/__pycache__/*
 src/sqlite_locking/*.so
