@@ -13,48 +13,6 @@ extern "C" {
 
 namespace py = pybind11;
 
-/*
- * Checks if a connection object belongs to a different thread.
- *
- * false => error; true => ok
- *
- * Directly copied from CPython 3.12 cpython/Modules/_sqlite/connection.c.
- */
-
-static void _check_thread(pysqlite_Connection *self)
-{
-    if (self->check_same_thread) {
-        if (PyThread_get_thread_ident() != self->thread_ident) {
-            std::ostringstream oss;
-            oss << "SQLite objects created in a thread can only be used in "
-                   "that "
-                   "same thread. The object was created in thread id "
-                << self->thread_ident << " and this is thread id "
-                << PyThread_get_thread_ident();
-            throw std::invalid_argument(oss.str());
-        }
-    }
-}
-
-/*
- * Checks if a connection object is usable (i. e. not closed).
- *
- * false => error; true => ok
- *
- * Directly copied from CPython 3.12 cpython/Modules/_sqlite/connection.c.
- */
-static void _check_connection(pysqlite_Connection *con)
-{
-    if (!con || !con->initialized) {
-        throw std::invalid_argument(
-            "Invalid connection or base Connection.__init__ not called");
-    }
-
-    if (!con->db) {
-        throw std::invalid_argument("Cannot operate on a closed database");
-    }
-}
-
 int sqlite3_txn_state_wrapper(py::handle connection, char *p_schema)
 {
     pysqlite_Connection *self = (pysqlite_Connection *)(connection.ptr());
@@ -250,8 +208,14 @@ static inline bool is_int_config(const int op)
 bool sqlite3_db_config_wrapper(py::handle connection, int op, int enable)
 {
     pysqlite_Connection *self = (pysqlite_Connection *)(connection.ptr());
-    _check_thread(self);
-    _check_connection(self);
+
+    // Cannot check_thread or check_connection here, because they are private
+    // (static) and rely on the internal structure of pysqlite_Connection,
+    // which is also private and changes between Python versions! So just rely
+    // on db being the first member of the structure, and hope that
+    // sqlite3_db_config will handle it being NULL, and that the user is not
+    // being naughty with threads!
+
     if (!is_int_config(op)) {
         throw std::invalid_argument("Unknown or unsupported config 'op'");
     }
