@@ -9,7 +9,7 @@ from multiprocessing import Event, Process
 
 import pytest
 from more_itertools import one
-from sqlite_locking.enums import SqliteLockState, TransactionState
+from sqlite_locking.enum import SqliteLockState, TransactionState
 from sqlite_locking.extension import load_extension
 
 logger = logging.getLogger(__file__)

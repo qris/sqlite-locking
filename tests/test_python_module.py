@@ -5,9 +5,10 @@ import os
 import sqlite3
 
 import pytest
-from sqlite_locking.enums import SqliteDatabaseStatus
+from sqlite_locking.enum import SqliteDatabaseStatus, SqliteDBConfig
 from sqlite_locking.extension import load_extension
 from sqlite_locking.python_module import (
+    sqlite3_db_config,
     sqlite3_errorlog_init,
     sqlite3_errorlog_read_logs,
     sqlite3_log,
@@ -134,3 +135,21 @@ def test_vfstrace(db_path):
             "vfstrace_test.xFileControl(database.tmp:,COMMIT_PHASETWO)",
             " -> SQLITE_NOTFOUND\n",
         ]
+
+
+def test_sqlite3_db_config():
+    """Test that our sqlite3_db_config wrapper works."""
+    with sqlite3.connect(":memory:") as db:
+        # Initial value should be False:
+        assert not SqliteDBConfig.NO_CKPT_ON_CLOSE.get(db)
+        # We should be able to set it to True:
+        assert SqliteDBConfig.NO_CKPT_ON_CLOSE.set(db, True)
+        assert SqliteDBConfig.NO_CKPT_ON_CLOSE.get(db)
+        # And back to False:
+        assert not SqliteDBConfig.NO_CKPT_ON_CLOSE.set(db, False)
+        assert not SqliteDBConfig.NO_CKPT_ON_CLOSE.get(db)
+
+        assert sqlite3_db_config(None, 42, -1) == (21, "Invalid connection")
+        assert sqlite3_db_config(None, 42, 0) == (21, "Invalid connection")
+        assert sqlite3_db_config(db, 42, -1) == (21, "Unknown or unsupported config 'op'")
+        assert sqlite3_db_config(db, 42, 0) == (21, "Unknown or unsupported config 'op'")

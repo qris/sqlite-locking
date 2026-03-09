@@ -6,9 +6,50 @@
 #include <pybind11/stl.h>
 #include <sqlite3.h>
 
+extern "C" {
 #include "connection.h"
+}
 
 namespace py = pybind11;
+
+/*
+ * Checks if a connection object belongs to a different thread.
+ *
+ * false => error; true => ok
+ *
+ * Directly copied from CPython 3.12 cpython/Modules/_sqlite/connection.c.
+ */
+
+static bool _check_thread(pysqlite_Connection *self)
+{
+    if (self->check_same_thread) {
+        if (PyThread_get_thread_ident() != self->thread_ident) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*
+ * Checks if a connection object is usable (i. e. not closed).
+ *
+ * false => error; true => ok
+ *
+ * Directly copied from CPython 3.12 cpython/Modules/_sqlite/connection.c.
+ */
+static bool _check_connection(pysqlite_Connection *con)
+{
+    if (!con->initialized) {
+        return false;
+    }
+
+    if (!con->db) {
+        return false;
+    }
+    else {
+        return true;
+    }
+}
 
 int sqlite3_txn_state_wrapper(py::handle connection, char *p_schema)
 {
@@ -157,6 +198,71 @@ std::string sqlite3_vfs_default()
     return default_vfs->zName;
 }
 
+// Directly copied from CPython 3.12 cpython/Modules/_sqlite/connection.c:
+static inline bool is_int_config(const int op)
+{
+    switch (op) {
+    case SQLITE_DBCONFIG_ENABLE_FKEY:
+    case SQLITE_DBCONFIG_ENABLE_TRIGGER:
+    case SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER:
+    case SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION:
+#if SQLITE_VERSION_NUMBER >= 3016000
+    case SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE:
+#endif
+#if SQLITE_VERSION_NUMBER >= 3020000
+    case SQLITE_DBCONFIG_ENABLE_QPSG:
+#endif
+#if SQLITE_VERSION_NUMBER >= 3022000
+    case SQLITE_DBCONFIG_TRIGGER_EQP:
+#endif
+#if SQLITE_VERSION_NUMBER >= 3024000
+    case SQLITE_DBCONFIG_RESET_DATABASE:
+#endif
+#if SQLITE_VERSION_NUMBER >= 3026000
+    case SQLITE_DBCONFIG_DEFENSIVE:
+#endif
+#if SQLITE_VERSION_NUMBER >= 3028000
+    case SQLITE_DBCONFIG_WRITABLE_SCHEMA:
+#endif
+#if SQLITE_VERSION_NUMBER >= 3029000
+    case SQLITE_DBCONFIG_DQS_DDL:
+    case SQLITE_DBCONFIG_DQS_DML:
+    case SQLITE_DBCONFIG_LEGACY_ALTER_TABLE:
+#endif
+#if SQLITE_VERSION_NUMBER >= 3030000
+    case SQLITE_DBCONFIG_ENABLE_VIEW:
+#endif
+#if SQLITE_VERSION_NUMBER >= 3031000
+    case SQLITE_DBCONFIG_LEGACY_FILE_FORMAT:
+    case SQLITE_DBCONFIG_TRUSTED_SCHEMA:
+#endif
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Directly copied from CPython 3.12 cpython/Modules/_sqlite/connection.c:
+py::tuple sqlite3_db_config_wrapper(py::handle connection, int op, int enable)
+{
+    pysqlite_Connection *self = (pysqlite_Connection *)(connection.ptr());
+    if (!_check_thread(self) || !_check_connection(self)) {
+        return py::make_tuple(SQLITE_MISUSE, "Invalid connection");
+        ;
+    }
+    if (!is_int_config(op)) {
+        return py::make_tuple(
+            SQLITE_MISUSE, "Unknown or unsupported config 'op'");
+    }
+
+    int actual;
+    int result = sqlite3_db_config(self->db, op, enable, &actual);
+    if (result != SQLITE_OK) {
+        return py::make_tuple(result, "sqlite3_db_config failed");
+    }
+    return py::make_tuple(result, actual);
+}
+
 PYBIND11_MODULE(python_module, m)
 {
     m.doc() = "Python native extensions used for low-level SQLite lock "
@@ -184,4 +290,50 @@ PYBIND11_MODULE(python_module, m)
         "Write a message into the SQLite error log, for testing ONLY");
     m.def("sqlite3_vfs_default", &sqlite3_vfs_default,
         "Return the name of the default VFS");
+    m.def("sqlite3_db_config", &sqlite3_db_config_wrapper,
+        "Call the sqlite3_db_config native function");
+
+    // Based on
+    // https://github.com/python/cpython/blob/0dfe649400a0b67318169ec813475f4949ad7b69/Modules/_sqlite/module.c#L444-L449
+    // and https://github.com/pybind/pybind11/issues/92#issuecomment-178131592:
+#define ADD_INT(ival)                                                          \
+    do {                                                                       \
+        m.attr(#ival) = py::int_(ival);                                        \
+    } while (0);
+
+    ADD_INT(SQLITE_DBCONFIG_ENABLE_FKEY);
+    ADD_INT(SQLITE_DBCONFIG_ENABLE_TRIGGER);
+    ADD_INT(SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER);
+    ADD_INT(SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION);
+#if SQLITE_VERSION_NUMBER >= 3016000
+    ADD_INT(SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE);
+#endif
+#if SQLITE_VERSION_NUMBER >= 3020000
+    ADD_INT(SQLITE_DBCONFIG_ENABLE_QPSG);
+#endif
+#if SQLITE_VERSION_NUMBER >= 3022000
+    ADD_INT(SQLITE_DBCONFIG_TRIGGER_EQP);
+#endif
+#if SQLITE_VERSION_NUMBER >= 3024000
+    ADD_INT(SQLITE_DBCONFIG_RESET_DATABASE);
+#endif
+#if SQLITE_VERSION_NUMBER >= 3026000
+    ADD_INT(SQLITE_DBCONFIG_DEFENSIVE);
+#endif
+#if SQLITE_VERSION_NUMBER >= 3028000
+    ADD_INT(SQLITE_DBCONFIG_WRITABLE_SCHEMA);
+#endif
+#if SQLITE_VERSION_NUMBER >= 3029000
+    ADD_INT(SQLITE_DBCONFIG_DQS_DDL);
+    ADD_INT(SQLITE_DBCONFIG_DQS_DML);
+    ADD_INT(SQLITE_DBCONFIG_LEGACY_ALTER_TABLE);
+#endif
+#if SQLITE_VERSION_NUMBER >= 3030000
+    ADD_INT(SQLITE_DBCONFIG_ENABLE_VIEW);
+#endif
+#if SQLITE_VERSION_NUMBER >= 3031000
+    ADD_INT(SQLITE_DBCONFIG_LEGACY_FILE_FORMAT);
+    ADD_INT(SQLITE_DBCONFIG_TRUSTED_SCHEMA);
+#endif
+#undef ADD_INT
 }
