@@ -8,6 +8,13 @@ import pytest
 from sqlite_locking.enum import SqliteDatabaseStatus, SqliteDBConfig
 from sqlite_locking.extension import load_extension
 from sqlite_locking.python_module import (
+    SQLITE_IOERR_DELETE,
+    SQLITE_IOERR_DELETE_NOENT,
+    SQLITE_MISMATCH,
+    SQLITE_NOTFOUND,
+    SQLITE_OK,
+    nodeletefs_delete,
+    nodeletefs_init,
     sqlite3_db_config,
     sqlite3_errorlog_init,
     sqlite3_errorlog_read_logs,
@@ -135,6 +142,72 @@ def test_vfstrace(db_path):
             "vfstrace_test.xFileControl(database.tmp:,COMMIT_PHASETWO)",
             " -> SQLITE_NOTFOUND\n",
         ]
+
+
+def test_nodeletefs(db_path, tmp_path):
+    """Test that our nodeletefs interface works."""
+    # Unregister nonexistent vfs:
+    assert nodeletefs_init("nodeletefs_test", "", "") == SQLITE_NOTFOUND
+
+    # Unregister a different vfs:
+    assert nodeletefs_init("unix", "", "") == SQLITE_MISMATCH
+
+    # Initialise nodeletefs_test and vfstrace (so we can see what it did).
+    # Prevent deletion of a journal file:
+    assert nodeletefs_init("nodeletefs_test", sqlite3_vfs_default(), f"{db_path}:-journal") == SQLITE_OK
+    assert sqlite3_vfstrace_init("vfstrace_test", "nodeletefs_test") == 0
+
+    with sqlite3.connect(f"file://{db_path}:?vfs=vfstrace_test", uri=True) as db:
+        assert db.execute("PRAGMA vfstrace('-all, +Delete');").fetchall() == []
+        sqlite3_vfstrace_read_logs()  # clear and discard logs from opening DB
+        # Switching to WAL mode should fail because we can't delete the old
+        # journal file:
+        with pytest.raises(sqlite3.OperationalError):
+            db.execute("PRAGMA journal_mode=WAL").fetchall()
+        assert sqlite3_vfstrace_read_logs() == [
+            f'vfstrace_test.xDelete("{db_path}:-journal",0)',
+            " -> SQLITE_IOERR_DELETE\n",
+        ]
+
+    # Initialise nodeletefs_test again, this time preventing deletion of a
+    # random file not actually used by SQLite:
+    nodelete_filename = f"{db_path}-nodelete"
+    assert nodeletefs_init("nodeletefs_test", sqlite3_vfs_default(), nodelete_filename) == SQLITE_OK
+
+    with sqlite3.connect(f"file://{db_path}:?vfs=vfstrace_test", uri=True) as db:
+        assert db.execute("PRAGMA vfstrace('-all, +Delete');").fetchall() == []
+        # Switching to WAL mode should work this time:
+        db.execute("PRAGMA journal_mode=WAL").fetchall()
+        sqlite3_vfstrace_read_logs()  # clear and discard logs from opening DB
+
+        # Trigger deletion of a file:
+        file_to_delete = str(tmp_path / "nonexistent.foo")
+        assert nodeletefs_delete(db, "main", file_to_delete) == SQLITE_IOERR_DELETE_NOENT
+        assert sqlite3_vfstrace_read_logs() == [
+            f'vfstrace_test.xDelete("{file_to_delete}",0)',
+            " -> SQLITE_IOERR | 0x1700\n",
+        ]
+
+        # Check that we can delete a file that exists, which is not nodelete_filename:
+        with open(file_to_delete, "x"):
+            pass
+        assert nodeletefs_delete(db, "main", file_to_delete) == SQLITE_OK
+        assert sqlite3_vfstrace_read_logs() == [
+            f'vfstrace_test.xDelete("{file_to_delete}",0)',
+            " -> SQLITE_OK\n",
+        ]
+
+        # Check that we can't delete nodelete_filename:
+        with open(nodelete_filename, "x"):
+            pass
+        assert nodeletefs_delete(db, "main", nodelete_filename) == SQLITE_IOERR_DELETE
+        assert sqlite3_vfstrace_read_logs() == [
+            f'vfstrace_test.xDelete("{nodelete_filename}",0)',
+            " -> SQLITE_IOERR_DELETE\n",
+        ]
+
+    # Unregister a valid nodeletefs vfs:
+    assert nodeletefs_init("nodeletefs_test", "", "") == SQLITE_OK
 
 
 def test_sqlite3_db_config():

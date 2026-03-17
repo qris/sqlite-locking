@@ -228,6 +228,254 @@ bool sqlite3_db_config_wrapper(py::handle connection, int op, int enable)
     return bool(actual);
 }
 
+/*
+** An instance of this structure is attached to the each trace VFS to
+** provide auxiliary information.
+*/
+typedef struct nodeletefs_info nodeletefs_info;
+struct nodeletefs_info {
+    sqlite3_vfs *pUnderlyingVfs;    /* The underlying real VFS */
+    const char *vfs_name;           /* "VFS name" of this nodeletefs */
+    const char *no_delete_filename; /* Name of the file to refuse to delete */
+};
+
+#define VFS_INFO(pVfs) ((nodeletefs_info *)((pVfs)->pAppData))
+#define VFS_ORIG(pVfs) (VFS_INFO(pVfs)->pUnderlyingVfs)
+
+/*
+** Delete the file located at zPath. If the dirSync argument is true,
+** ensure the file-system modifications are synced to disk before
+** returning. Overridden to prevent deletion in nodeletefs!
+*/
+static int nodeletefs_Delete(sqlite3_vfs *pVfs, const char *zPath, int dirSync)
+{
+    nodeletefs_info *pInfo = VFS_INFO(pVfs);
+    if (strcmp(zPath, pInfo->no_delete_filename) == 0) {
+        return SQLITE_IOERR_DELETE;
+    }
+    return VFS_ORIG(pVfs)->xDelete(VFS_ORIG(pVfs), zPath, dirSync);
+}
+
+/* We need to implement ALL VFS methods, even those that we don't intend to
+ * use ourselves, because we need to pass the underlying VFS' structure to its
+ * methods, so we need to dereference ours to get it.
+ */
+
+static int nodeletefs_Open(sqlite3_vfs *pVfs, /* VFS */
+    const char *zName,   /* File to open, or 0 for a temp file */
+    sqlite3_file *pFile, /* Pointer to DemoFile struct to populate */
+    int flags,           /* Input SQLITE_OPEN_XXX flags */
+    int *pOutFlags       /* Output SQLITE_OPEN_XXX flags (or NULL) */
+)
+{
+    return VFS_ORIG(pVfs)->xOpen(
+        VFS_ORIG(pVfs), zName, pFile, flags, pOutFlags);
+}
+
+static int nodeletefs_Access(
+    sqlite3_vfs *pVfs, const char *zPath, int flags, int *pResOut)
+{
+    return VFS_ORIG(pVfs)->xAccess(VFS_ORIG(pVfs), zPath, flags, pResOut);
+}
+
+static int nodeletefs_FullPathname(
+    sqlite3_vfs *pVfs, const char *zPath, int nOut, char *zOut)
+{
+    return VFS_ORIG(pVfs)->xFullPathname(VFS_ORIG(pVfs), zPath, nOut, zOut);
+}
+
+static void *nodeletefs_DlOpen(sqlite3_vfs *pVfs, const char *zPath)
+{
+    return VFS_ORIG(pVfs)->xDlOpen(VFS_ORIG(pVfs), zPath);
+}
+
+static void nodeletefs_DlError(sqlite3_vfs *pVfs, int nByte, char *zErrMsg)
+{
+    VFS_ORIG(pVfs)->xDlError(VFS_ORIG(pVfs), nByte, zErrMsg);
+}
+
+static void (*nodeletefs_DlSym(sqlite3_vfs *pVfs, void *p, const char *zSym))(
+    void)
+{
+    return VFS_ORIG(pVfs)->xDlSym(VFS_ORIG(pVfs), p, zSym);
+}
+
+static void nodeletefs_DlClose(sqlite3_vfs *pVfs, void *pHandle)
+{
+    VFS_ORIG(pVfs)->xDlClose(VFS_ORIG(pVfs), pHandle);
+}
+
+static int nodeletefs_Randomness(sqlite3_vfs *pVfs, int nByte, char *zBufOut)
+{
+    return VFS_ORIG(pVfs)->xRandomness(VFS_ORIG(pVfs), nByte, zBufOut);
+}
+
+static int nodeletefs_Sleep(sqlite3_vfs *pVfs, int nMicro)
+{
+    return VFS_ORIG(pVfs)->xSleep(VFS_ORIG(pVfs), nMicro);
+}
+
+static int nodeletefs_CurrentTime(sqlite3_vfs *pVfs, double *pTimeOut)
+{
+    return VFS_ORIG(pVfs)->xCurrentTime(VFS_ORIG(pVfs), pTimeOut);
+}
+
+static int nodeletefs_GetLastError(sqlite3_vfs *pVfs, int a, char *b)
+{
+    return VFS_ORIG(pVfs)->xGetLastError(VFS_ORIG(pVfs), a, b);
+}
+
+static int nodeletefs_CurrentTimeInt64(sqlite3_vfs *pVfs, sqlite3_int64 *p)
+{
+    return VFS_ORIG(pVfs)->xCurrentTimeInt64(VFS_ORIG(pVfs), p);
+}
+
+/*
+** Clients invoke this routine to construct a new nodeletefs shim.
+**
+** Return SQLITE_OK on success.
+**
+** SQLITE_NOMEM is returned in the case of a memory allocation error.
+** SQLITE_NOTFOUND is returned if zOldVfsName does not exist.
+*/
+static int nodeletefs_register(
+    const char *zNewVfsName,        /* Name of the newly constructed VFS */
+    const char *zOldVfsName,        /* Name of the underlying VFS */
+    const char *no_delete_filename, /* Name of file to refuse to delete */
+    int makeDefault                 /* True to make the new VFS the default */
+)
+{
+    sqlite3_vfs *pNew;
+    sqlite3_vfs *pUnderlyingVfs;
+    nodeletefs_info *pInfo;
+    size_t nByte;
+
+    pUnderlyingVfs = sqlite3_vfs_find(zOldVfsName);
+    if (pUnderlyingVfs == 0)
+        return SQLITE_NOTFOUND;
+    nByte = sizeof(*pNew) + sizeof(*pInfo);
+    pNew = (sqlite3_vfs *)sqlite3_malloc64(nByte);
+    if (pNew == 0)
+        return SQLITE_NOMEM;
+    memset(pNew, 0, nByte);
+    pInfo = (nodeletefs_info *)&pNew[1];
+    pInfo->pUnderlyingVfs = pUnderlyingVfs;
+    pInfo->vfs_name = strdup(zNewVfsName);
+    pInfo->no_delete_filename = strdup(no_delete_filename);
+
+    pNew->iVersion = pUnderlyingVfs->iVersion;
+    pNew->szOsFile = pUnderlyingVfs->szOsFile;
+    pNew->mxPathname = pUnderlyingVfs->mxPathname;
+    pNew->zName = pInfo->vfs_name;
+    pNew->pAppData = pInfo;
+
+    pNew->xOpen = nodeletefs_Open;
+    pNew->xDelete = nodeletefs_Delete;
+    pNew->xAccess = nodeletefs_Access;
+    pNew->xFullPathname = nodeletefs_FullPathname;
+    pNew->xDlOpen = nodeletefs_DlOpen;
+    pNew->xDlError = nodeletefs_DlError;
+    pNew->xDlSym = nodeletefs_DlSym;
+    pNew->xDlClose = nodeletefs_DlClose;
+    pNew->xRandomness = nodeletefs_Randomness;
+    pNew->xSleep = nodeletefs_Sleep;
+    pNew->xCurrentTime = nodeletefs_CurrentTime;
+    pNew->xGetLastError = nodeletefs_GetLastError;
+    if (pNew->iVersion >= 2) {
+        pNew->xCurrentTimeInt64 = nodeletefs_CurrentTimeInt64;
+        /*
+        if (pNew->iVersion >= 3) {
+            pNew->xSetSystemCall = pRoot->xSetSystemCall;
+            pNew->xGetSystemCall = pRoot->xGetSystemCall;
+            pNew->xNextSystemCall = pRoot->xNextSystemCall;
+        }
+        */
+    }
+
+    return sqlite3_vfs_register(pNew, makeDefault);
+}
+
+/*
+** Look for the named VFS.  If it is a TRACEVFS, then unregister it
+** and delete it.
+*/
+static int nodeletefs_unregister(const char *vfs_name)
+{
+    sqlite3_vfs *pVfs = sqlite3_vfs_find(vfs_name);
+    if (pVfs == 0)
+        return SQLITE_NOTFOUND;
+
+    if (pVfs->xDelete != nodeletefs_Delete)
+        return SQLITE_MISMATCH;
+
+    nodeletefs_info *pInfo = (nodeletefs_info *)pVfs->pAppData;
+    free((void *)(pInfo->vfs_name));
+    free((void *)(pInfo->no_delete_filename));
+    sqlite3_vfs_unregister(pVfs);
+    sqlite3_free(pVfs);
+    return SQLITE_OK;
+}
+
+static int nodeletefs_init(const std::string &new_vfs_name,
+    const std::string &old_vfs_name, const std::string &no_delete_filename)
+{
+    /**
+     * Install the nodeletefs VFS, stacked on top of old_vfs_name (an existing
+     * VFS).
+     *
+     * If old_vfs_name is empty, just unregister the nodeletefs named
+     * new_vfs_name, if it exists.
+     */
+    int rc = nodeletefs_unregister(new_vfs_name.c_str());
+    if (rc != SQLITE_OK && rc != SQLITE_NOTFOUND) {
+        return rc;
+    }
+    if (!old_vfs_name.empty()) {
+        return nodeletefs_register(new_vfs_name.c_str(), old_vfs_name.c_str(),
+            no_delete_filename.c_str(), 0);
+    }
+    else {
+        return rc; // might be SQLITE_OK or SQLITE_NOTFOUND
+    }
+}
+
+/*
+ * Delete a file (on disk) using the VFS method xDelete. Used to test that
+ * nodeletefs is doing what it should.
+ *
+ * xDelete does not seem to be properly documented on this page:
+ * <https://sqlite.org/c3ref/vfs.html>. But there is some test code here:
+ * <https://sqlite.org/src/doc/trunk/src/test_vfs.c>, which says:
+ * "Delete the file located at zPath. If the dirSync argument is true, ensure
+ * the file-system modifications are synced to disk before returning."
+ */
+static int nodeletefs_delete_wrapper(py::handle connection,
+    const std::string &schema_name, const std::string &filename)
+{
+    pysqlite_Connection *self = (pysqlite_Connection *)(connection.ptr());
+    sqlite3 *db = self->db;
+    sqlite3_vfs *pVfs = NULL;
+
+    int rc = sqlite3_file_control(
+        db, schema_name.c_str(), SQLITE_FCNTL_VFS_POINTER, &pVfs);
+    if (rc != SQLITE_OK) {
+        sqlite3_log(rc, "SQLITE_FCNTL_VFS_POINTER failed");
+        return rc;
+    }
+
+    if (pVfs == NULL) {
+        sqlite3_log(rc, "SQLITE_FCNTL_VFS_POINTER returned NULL");
+        return SQLITE_NOMEM;
+    }
+
+    rc = pVfs->xDelete(pVfs, filename.c_str(), 0);
+    if (rc != SQLITE_OK) {
+        sqlite3_log(rc, "xDelete failed");
+    }
+
+    return rc;
+}
+
 PYBIND11_MODULE(python_module, m)
 {
     m.doc() = "Python native extensions used for low-level SQLite lock "
@@ -257,6 +505,11 @@ PYBIND11_MODULE(python_module, m)
         "Return the name of the default VFS");
     m.def("sqlite3_db_config", &sqlite3_db_config_wrapper,
         "Call the sqlite3_db_config native function");
+    m.def("nodeletefs_init", &nodeletefs_init,
+        "Create a new VFS using nodeletefs, with the specified name");
+    m.def("nodeletefs_delete", &nodeletefs_delete_wrapper,
+        "Delete a file (on disk) using the VFS method xDelete, for testing "
+        "ONLY");
 
     // Based on
     // https://github.com/python/cpython/blob/0dfe649400a0b67318169ec813475f4949ad7b69/Modules/_sqlite/module.c#L444-L449
@@ -265,6 +518,14 @@ PYBIND11_MODULE(python_module, m)
     do {                                                                       \
         m.attr(#ival) = py::int_(ival);                                        \
     } while (0);
+
+    ADD_INT(SQLITE_OK);
+    ADD_INT(SQLITE_MISMATCH);
+    ADD_INT(SQLITE_MISUSE);
+    ADD_INT(SQLITE_NOTFOUND);
+    ADD_INT(SQLITE_IOERR);
+    ADD_INT(SQLITE_IOERR_DELETE);
+    ADD_INT(SQLITE_IOERR_DELETE_NOENT);
 
     ADD_INT(SQLITE_DBCONFIG_ENABLE_FKEY);
     ADD_INT(SQLITE_DBCONFIG_ENABLE_TRIGGER);
