@@ -155,10 +155,10 @@ def test_nodeletefs(db_path, tmp_path):
 
     # Initialise nodeletefs_test and vfstrace (so we can see what it did).
     # Prevent deletion of a journal file:
-    assert nodeletefs_init("nodeletefs_test", sqlite3_vfs_default(), f"{db_path}:-journal") == SQLITE_OK
+    assert nodeletefs_init("nodeletefs_test", sqlite3_vfs_default(), f"{db_path}-journal") == SQLITE_OK
     assert sqlite3_vfstrace_init("vfstrace_test", "nodeletefs_test") == 0
 
-    with sqlite3.connect(f"file://{db_path}:?vfs=vfstrace_test", uri=True) as db:
+    with sqlite3.connect(f"file://{db_path}?vfs=vfstrace_test", uri=True) as db:
         assert db.execute("PRAGMA vfstrace('-all, +Delete');").fetchall() == []
         sqlite3_vfstrace_read_logs()  # clear and discard logs from opening DB
         # Switching to WAL mode should fail because we can't delete the old
@@ -166,7 +166,7 @@ def test_nodeletefs(db_path, tmp_path):
         with pytest.raises(sqlite3.OperationalError):
             db.execute("PRAGMA journal_mode=WAL").fetchall()
         assert sqlite3_vfstrace_read_logs() == [
-            f'vfstrace_test.xDelete("{db_path}:-journal",0)',
+            f'vfstrace_test.xDelete("{db_path}-journal",0)',
             " -> SQLITE_IOERR_DELETE\n",
         ]
 
@@ -175,7 +175,7 @@ def test_nodeletefs(db_path, tmp_path):
     nodelete_filename = f"{db_path}-nodelete"
     assert nodeletefs_init("nodeletefs_test", sqlite3_vfs_default(), nodelete_filename) == SQLITE_OK
 
-    with sqlite3.connect(f"file://{db_path}:?vfs=vfstrace_test", uri=True) as db:
+    with sqlite3.connect(f"file://{db_path}?vfs=vfstrace_test", uri=True) as db:
         assert db.execute("PRAGMA vfstrace('-all, +Delete');").fetchall() == []
         # Switching to WAL mode should work this time:
         db.execute("PRAGMA journal_mode=WAL").fetchall()
