@@ -19,6 +19,7 @@ from sqlite_locking.python_module import (
     sqlite3_errorlog_init,
     sqlite3_errorlog_read_logs,
     sqlite3_log,
+    sqlite3_set_persist_wal,
     sqlite3_vfs_default,
     sqlite3_vfstrace_init,
     sqlite3_vfstrace_read_logs,
@@ -238,3 +239,28 @@ def test_sqlite3_db_config():
         sqlite3_db_config(db, 42, -1)
     with pytest.raises(ValueError, match="Unknown or unsupported config 'op'"):
         sqlite3_db_config(db, 42, 0)
+
+
+def test_sqlite3_set_persist_wal(db_path):
+    """Test that our sqlite3_set_persist_wal function works."""
+    # By default, the WAL file should be deleted when the database is closed:
+    with sqlite3.connect(f"file://{db_path}", uri=True) as db:
+        db.execute("PRAGMA journal_mode=WAL").fetchall()
+        db.execute("CREATE TABLE t1(a)").close()
+    db.close()
+    assert not os.path.exists(f"{db_path}-wal")
+
+    # But not if we set the persist_wal flag first:
+    assert sqlite3_vfstrace_init("vfstrace_test", "unix") == 0
+    with sqlite3.connect(f"file://{db_path}?vfs=vfstrace_test", uri=True) as db:
+        assert sqlite3_set_persist_wal(db, "main", True) == SQLITE_OK
+        db.execute("SELECT * FROM t1").close()
+    db.close()
+    assert os.path.exists(f"{db_path}-wal")
+
+    # And if we clear the flag, the WAL file should be deleted on close again:
+    with sqlite3.connect(f"file://{db_path}", uri=True) as db:
+        assert sqlite3_set_persist_wal(db, "main", False) == SQLITE_OK
+        db.execute("SELECT * FROM t1").close()
+    db.close()
+    assert not os.path.exists(f"{db_path}-wal")

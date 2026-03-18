@@ -229,6 +229,28 @@ bool sqlite3_db_config_wrapper(py::handle connection, int op, int enable)
 }
 
 /*
+** Turn the persist_wal flag on or off on the given database connection
+** and schema. Setting this flag causes the WAL and SHM files to persist (not be
+** deleted) after the checkpoint which follows the last database connection
+** being closed.
+** <https://sqlite.org/c3ref/c_fcntl_begin_atomic_write.html#sqlitefcntlpersistwal>
+*/
+
+int sqlite3_set_persist_wal(
+    py::handle connection, std::string schema_name, bool persist_wal)
+{
+    pysqlite_Connection *self = (pysqlite_Connection *)(connection.ptr());
+    sqlite3 *db = self->db;
+    int new_value = (persist_wal ? 1 : 0);
+    int rc = sqlite3_file_control(
+        db, schema_name.c_str(), SQLITE_FCNTL_PERSIST_WAL, &new_value);
+    if (rc != SQLITE_OK) {
+        sqlite3_log(rc, "SQLITE_FCNTL_PERSIST_WAL failed");
+    }
+    return rc;
+}
+
+/*
 ** An instance of this structure is attached to the each trace VFS to
 ** provide auxiliary information.
 */
@@ -505,6 +527,8 @@ PYBIND11_MODULE(python_module, m)
         "Return the name of the default VFS");
     m.def("sqlite3_db_config", &sqlite3_db_config_wrapper,
         "Call the sqlite3_db_config native function");
+    m.def("sqlite3_set_persist_wal", &sqlite3_set_persist_wal,
+        "Turn the persist_wal flag on or off");
     m.def("nodeletefs_init", &nodeletefs_init,
         "Create a new VFS using nodeletefs, with the specified name");
     m.def("nodeletefs_delete", &nodeletefs_delete_wrapper,
