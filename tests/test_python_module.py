@@ -3,11 +3,13 @@
 import logging
 import os
 import sqlite3
+from enum import Enum, auto
 
 import pytest
 from sqlite_locking.enum import SqliteDatabaseStatus, SqliteDBConfig
 from sqlite_locking.extension import load_extension
 from sqlite_locking.python_module import (
+    SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
     SQLITE_IOERR_DELETE,
     SQLITE_IOERR_DELETE_NOENT,
     SQLITE_MISMATCH,
@@ -264,3 +266,117 @@ def test_sqlite3_set_persist_wal(db_path):
         db.execute("SELECT * FROM t1").close()
     db.close()
     assert not os.path.exists(f"{db_path}-wal")
+
+
+class WalFileDisposition(Enum):
+    """Options for what should happen to the WAL file in test_repeated_backfills."""
+
+    NORMAL = auto()  # normal behaviour, WAL file deleted on close
+    NODELETE = auto()  # nodeletefs extension prevents removal of WAL file
+    PERSIST = auto()  # SQLITE_FCNTL_PERSIST_WAL prevents removal of WAL file
+    CHECKPOINT = auto()  # explicit wal_checkpoint() before close
+    NO_CHECKPOINT = auto()  # SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE prevents checkpoint on close
+
+
+@pytest.mark.parametrize("disposition", list(WalFileDisposition))
+def test_repeated_backfills(disposition, db_path):
+    """Check for unexpected repeated backfilling from WAL to DB file."""
+    wal_file = f"{db_path}-wal"
+
+    # Do we expect to see recovery run on second connection to the database?
+    # That depends on the disposition for this test case. I think this is a bug
+    # (should not happen if the database was closed cleanly) but this test aims
+    # to reproduce it in these cases, and passes if it does so:
+    recovery_expected = disposition in (
+        WalFileDisposition.NODELETE,
+        WalFileDisposition.PERSIST,
+        WalFileDisposition.NO_CHECKPOINT,
+    )
+
+    sqlite3_errorlog_init()
+    sqlite3_errorlog_read_logs()  # clear out any leftover error logs from other tests
+
+    if disposition is WalFileDisposition.NODELETE:
+        # Initialise nodeletefs_test, configured to prevent deletion of the
+        # database WAL file:
+        assert nodeletefs_init("nodeletefs_test", sqlite3_vfs_default(), wal_file) == SQLITE_OK
+        underlying_vfs = "nodeletefs_test"
+    else:
+        underlying_vfs = sqlite3_vfs_default()
+
+    # Stack vfstrace on top so that we can see what happens during the test,
+    # especially detecting checkpoints:
+    assert sqlite3_vfstrace_init("vfstrace_test", underlying_vfs) == 0
+
+    def db_connection():
+        with sqlite3.connect(f"file://{db_path}?vfs=vfstrace_test", uri=True) as db:
+            # Enable SQLITE_FCNTL_PERSIST_WAL only if WalFileDisposition.PERSIST:
+            assert sqlite3_set_persist_wal(db, "main", (disposition is WalFileDisposition.PERSIST)) == SQLITE_OK
+            # Enable SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE only if WalFileDisposition.NO_CHECKPOINT:
+            sqlite3_db_config(
+                db,
+                SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
+                (1 if disposition is WalFileDisposition.NO_CHECKPOINT else 0),
+            )
+            return db
+
+    db = db_connection()
+    db.execute("PRAGMA journal_mode=WAL").close()
+    db.execute("CREATE TABLE t (id TEXT)").close()
+    db.execute("INSERT INTO t VALUES ('a')").close()
+
+    def get_vfstrace_logs():
+        return "".join(sqlite3_vfstrace_read_logs()).splitlines()
+
+    # We search for this line in the vfstrace logs to find out whether a
+    # checkpoint was done:
+    db_filename = os.path.basename(db_path)
+    checkpoint_indicator = f"vfstrace_test.xFileControl({db_filename},CKPT_DONE) -> SQLITE_NOTFOUND"
+
+    # Close the database for the first time:
+    db.close()
+
+    # The first connection should not run recovery, so we should not see it in
+    # the error_log:
+    error_log = sqlite3_errorlog_read_logs()
+    assert error_log == []
+
+    vfstrace_logs = get_vfstrace_logs()
+    # pprint(logs)
+    # We always expect to see a checkpoint when the first connection is closed,
+    # unless disposition was WalFileDisposition.NO_CHECKPOINT which disables it:
+    if disposition is WalFileDisposition.NO_CHECKPOINT:
+        assert checkpoint_indicator not in vfstrace_logs
+    else:
+        assert checkpoint_indicator in vfstrace_logs
+
+    # Iff the WAL file exists after close, then we (unfortunately) expect
+    # database recovery to happen on next open, so the reverse is also true:
+    assert os.path.exists(wal_file) == recovery_expected
+
+    # Reopen and close the database again:
+    db = db_connection()
+    db.execute("SELECT * FROM t").close()
+    if disposition is WalFileDisposition.CHECKPOINT:
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)").close()
+    db.close()
+
+    # What happened during the second connection? If recovery_expected then we
+    # expect it to run recovery, which should log "recovered 2 frames from WAL file":
+    error_log = sqlite3_errorlog_read_logs()
+    if recovery_expected:
+        assert error_log == [
+            (283, f"recovered 2 frames from WAL file {db_path}-wal"),
+        ]
+    else:
+        assert error_log == []
+
+    vfstrace_logs = get_vfstrace_logs()
+    # pprint(vfstrace_logs)
+    # If recovery_expected and not NO_CHECKPOINT (which disables the checkpoint)
+    # then we expect this recovery to cause another checkpoint on close, because
+    # nBackfill was reset to 0:
+    if recovery_expected and disposition is not WalFileDisposition.NO_CHECKPOINT:
+        assert checkpoint_indicator in vfstrace_logs
+    else:
+        assert checkpoint_indicator not in vfstrace_logs
