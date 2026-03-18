@@ -274,13 +274,44 @@ class WalFileDisposition(Enum):
     NORMAL = auto()  # normal behaviour, WAL file deleted on close
     NODELETE = auto()  # nodeletefs extension prevents removal of WAL file
     PERSIST = auto()  # SQLITE_FCNTL_PERSIST_WAL prevents removal of WAL file
+    PERSIST_LIMIT = auto()  # SQLITE_FCNTL_PERSIST_WAL with a journal size limit, truncates WAL instead
     CHECKPOINT = auto()  # explicit wal_checkpoint() before close
     NO_CHECKPOINT = auto()  # SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE prevents checkpoint on close
 
 
 @pytest.mark.parametrize("disposition", list(WalFileDisposition))
 def test_repeated_backfills(disposition, db_path):
-    """Check for unexpected repeated backfilling from WAL to DB file."""
+    """
+    Test the "bug" that causes unexpected repeated backfilling from WAL to DB file.
+
+    "Usually, the WAL file is deleted automatically when the last connection to
+    the database closes." However, if this doesn't happen for some reason, for
+    example:
+
+    * The WAL file is owned by a different user, so deletion fails with permission denied.
+    * SQLITE_FCNTL_PERSIST_WAL is used to prevent its deletion on close.
+    * SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE is used to prevent the checkpoint on close,
+      which prevents the WAL file from being deleted as it is still in use.
+
+    (corresponding to dispositions NODELETE, PERSIST and NO_CHECKPOINT above)
+    then the next connection runs recovery on the leftover WAL file. "Since the
+    recovery procedure has no way of knowing how many frames of the WAL might
+    have previously been copied back into the database, it initializes the
+    nBackfill value to zero."
+
+    So, on the next checkpoint or when the database is closed again, the entire
+    WAL will be backfilled into the main database file **again** (starting from
+    nBackfill == 0). Note that in cases NODELETE and PERSIST above, the entire
+    WAL file has already been backfilled (by the successful checkpoint on
+    close), so nBackflll should equal mxFrame, not zero.
+
+    See <https://sqlite.org/forum/forumpost/0897cec5bf> for more details.
+
+    Note that PERSIST_LIMIT (combining `SQLITE_FCNTL_PERSIST_WAL` with
+    `PRAGMA journal_size_limit`) seems to be a reasonable workaround, because it
+    truncates the WAL file on close (instead of deleting it), so there is
+    nothing for the next connection to recover.
+    """
     wal_file = f"{db_path}-wal"
 
     # Do we expect to see recovery run on second connection to the database?
@@ -310,8 +341,20 @@ def test_repeated_backfills(disposition, db_path):
 
     def db_connection():
         with sqlite3.connect(f"file://{db_path}?vfs=vfstrace_test", uri=True) as db:
-            # Enable SQLITE_FCNTL_PERSIST_WAL only if WalFileDisposition.PERSIST:
-            assert sqlite3_set_persist_wal(db, "main", (disposition is WalFileDisposition.PERSIST)) == SQLITE_OK
+            # Enable SQLITE_FCNTL_PERSIST_WAL only if WalFileDisposition.PERSIST or
+            # PERSIST_LIMIT:
+            assert (
+                sqlite3_set_persist_wal(
+                    db,
+                    "main",
+                    (disposition in (WalFileDisposition.PERSIST, WalFileDisposition.PERSIST_LIMIT)),
+                )
+                == SQLITE_OK
+            )
+
+            if disposition is WalFileDisposition.PERSIST_LIMIT:
+                db.execute("PRAGMA journal_size_limit=1000").close()
+
             # Enable SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE only if WalFileDisposition.NO_CHECKPOINT:
             sqlite3_db_config(
                 db,
@@ -351,8 +394,10 @@ def test_repeated_backfills(disposition, db_path):
         assert checkpoint_indicator in vfstrace_logs
 
     # Iff the WAL file exists after close, then we (unfortunately) expect
-    # database recovery to happen on next open, so the reverse is also true:
-    assert os.path.exists(wal_file) == recovery_expected
+    # database recovery to happen on next open, so the reverse is also true.
+    # Also, if disposition is PERSIST_LIMIT then, like PERSIST, the file will
+    # still exist:
+    assert os.path.exists(wal_file) == (recovery_expected or disposition is WalFileDisposition.PERSIST_LIMIT)
 
     # Reopen and close the database again:
     db = db_connection()
