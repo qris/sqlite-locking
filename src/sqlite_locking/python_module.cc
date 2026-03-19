@@ -119,6 +119,15 @@ int sqlite3_errorlog_append_log(void *pArg, int iErrCode, const char *zMsg)
 
 int sqlite3_errorlog_init()
 {
+    /**
+     * Sets the SQLite logging callback to our own, which enables
+     * sqlite3_errorlog_read_logs.
+     *
+     * Until SQLite 3.42.0 it was an error to call this after SQLite was
+     * initialised (so any time after importing the sqlite3 module), and it
+     * would return SQLITE_MISUSE (21). Since that version it is an "anytime
+     * configuration option".
+     */
     return sqlite3_config(SQLITE_CONFIG_LOG, sqlite3_errorlog_append_log, NULL);
 }
 
