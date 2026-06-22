@@ -411,7 +411,7 @@ def test_repeated_backfills(disposition, db_path):
     error_log = sqlite3_errorlog_read_logs()
     if recovery_expected:
         assert error_log == [
-            (283, f"recovered 2 frames from WAL file {db_path}-wal"),
+            (283, f"recovered 2 frames from WAL file {wal_file}"),
         ]
     else:
         assert error_log == []

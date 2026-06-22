@@ -124,3 +124,10 @@ sqlite_locking @ git+https://github.com/qris/sqlite-locking.git@d1f77c60a703b2cc
 * Run `pdm run pytest` to run the tests.
 * Run `pdm run ruff check` to check for lint errors.
 * Increase the version number in `pyproject.toml` before pushing back to the main repo.
+
+If compilation fails, there are some different commands you can try to get more access to the compiler command lines etc:
+
+```
+pdm run setup.py build_ext -f
+pdm run pip install .
+```
