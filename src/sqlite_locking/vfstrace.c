@@ -858,7 +858,7 @@ static int vfstraceShmUnmap(sqlite3_file *pFile, int delFlag){
   vfstrace_print_errcode(pInfo, " -> %s\n", rc);
   return rc;
 }
-static int vfstraceFetch(sqlite3_file *pFile, i64 iOff, int nAmt, void **pptr){
+static int vfstraceFetch(sqlite3_file *pFile, sqlite3_int64 iOff, int nAmt, void **pptr){
   vfstrace_file *p = (vfstrace_file *)pFile;
   vfstrace_info *pInfo = p->pInfo;
   int rc;
@@ -869,7 +869,7 @@ static int vfstraceFetch(sqlite3_file *pFile, i64 iOff, int nAmt, void **pptr){
   vfstrace_print_errcode(pInfo, " -> %s\n", rc);
   return rc;
 }
-static int vfstraceUnfetch(sqlite3_file *pFile, i64 iOff, void *ptr){
+static int vfstraceUnfetch(sqlite3_file *pFile, sqlite3_int64 iOff, void *ptr){
   vfstrace_file *p = (vfstrace_file *)pFile;
   vfstrace_info *pInfo = p->pInfo;
   int rc;
