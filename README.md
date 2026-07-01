@@ -14,7 +14,8 @@ as SQL functions, so you can call them with SELECT queries:
 * `sqlite3_lock_state` (SQLITE_FCNTL_LOCKSTATE)
 * `sqlite3_check_reserved_lock`
 * `sqlite3_stmt_readonly`
-* `sqlite3_external_reader` (SQLITE_FCNTL_EXTERNAL_READER)
+* `sqlite3_external_reader` (SQLITE_FCNTL_EXTERNAL_READER, requires Python
+  built with SQLite >= 3.45 or it will not be compiled in!)
 * `sqlite3_xlock` and `sqlite3_xunlock` (VFS xLock and xUnlock)
 
 And a Python module containing functions that you can call directly from Python,
@@ -30,8 +31,8 @@ and some SQLite constants:
 * sqlite3_vfstrace_init: initialises the bundled `vfstrace` VFS extension.
 * sqlite3_vfstrace_read_logs: returns the vfstrace logs collected by that extension.
 * sqlite3_errorlog_init: installs our own sqlite3 errorlog callback. In older
-  versions of Python (sqlite3 < 3.42.0) this must be called before importing
-  `sqlite3`, or it will fail and return SQLITE_MISUSE (21).
+  versions of Python (built with sqlite3 < 3.42.0) this must be called before
+  importing `sqlite3`, or it will fail and return SQLITE_MISUSE (21).
 * sqlite3_errorlog_read_logs: returns the logs collected by that callback.
 * sqlite3_log: calls the native function.
 * sqlite3_vfs_default: returns the name of the current default VFS (e.g. `unix`).

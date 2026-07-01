@@ -13,6 +13,7 @@ from sqlite_locking.python_module import (
     SQLITE_IOERR_DELETE,
     SQLITE_IOERR_DELETE_NOENT,
     SQLITE_MISMATCH,
+    SQLITE_MISUSE,
     SQLITE_NOTFOUND,
     SQLITE_OK,
     nodeletefs_delete,
@@ -73,6 +74,18 @@ def test_query_cache_spills(db):
     assert result == 31
 
 
+def errorlog_supported():
+    """
+    Return True if the errorlog should be supported on this Python.
+
+    Until SQLite 3.42.0 it was an error to call this after SQLite was
+    initialised (so any time after importing the sqlite3 module), and it
+    would return SQLITE_MISUSE (21). Since that version it is an "anytime
+    configuration option".
+    """
+    return sqlite3.sqlite_version_info >= (3, 42)
+
+
 def test_errorlog(db):
     """
     Test that our sqlite error log wrapper works.
@@ -80,7 +93,11 @@ def test_errorlog(db):
     This is a Python interface to the SQLite "error logging callback". See
     <https://sqlite.org/errlog.html> for details.
     """
-    sqlite3_errorlog_init()
+    if not errorlog_supported():
+        assert sqlite3_errorlog_init() == SQLITE_MISUSE
+        return
+
+    assert sqlite3_errorlog_init() == SQLITE_OK
     assert sqlite3_errorlog_read_logs() == []
 
     sqlite3_log(42, "hello world")
@@ -135,10 +152,11 @@ def test_vfstrace(db_path):
         ]
 
         db.execute("CREATE TABLE t (ID integer)").close()
-        assert sqlite3_vfstrace_read_logs() == [
-            "vfstrace_test.xFileControl(database.tmp:,PRAGMA,[integrity_check,t])",
-            " -> SQLITE_NOTFOUND\n",
-        ]
+        # CREATE TABLE does not trigger a PRAGMA integrity_check on all
+        # platforms. In case it does, we need to clear the log buffer by
+        # calling sqlite3_vfstrace_read_logs() before the next part of the
+        # test:
+        sqlite3_vfstrace_read_logs()
 
         db.execute("COMMIT").close()
         assert sqlite3_vfstrace_read_logs() == [
@@ -382,7 +400,8 @@ def test_repeated_backfills(disposition, db_path):
     # The first connection should not run recovery, so we should not see it in
     # the error_log:
     error_log = sqlite3_errorlog_read_logs()
-    assert error_log == []
+    if errorlog_supported():
+        assert error_log == []
 
     vfstrace_logs = get_vfstrace_logs()
     # pprint(logs)
@@ -409,7 +428,7 @@ def test_repeated_backfills(disposition, db_path):
     # What happened during the second connection? If recovery_expected then we
     # expect it to run recovery, which should log "recovered 2 frames from WAL file":
     error_log = sqlite3_errorlog_read_logs()
-    if recovery_expected:
+    if recovery_expected and errorlog_supported():
         assert error_log == [
             (283, f"recovered 2 frames from WAL file {wal_file}"),
         ]

@@ -322,6 +322,7 @@ static void sqlite3_check_reserved_lock_func(sqlite3_context *context, int argc,
   sqlite3_result_int(context, result);
 }
 
+#ifdef SQLITE_FCNTL_EXTERNAL_READER
 /*
  * Implementation of the "sqlite3_external_reader()" SQL function.
  *
@@ -353,6 +354,7 @@ static void sqlite3_external_reader_func(sqlite3_context *context, int argc,
 
   sqlite3_result_int(context, external_reader);
 }
+#endif // SQLITE_FCNTL_EXTERNAL_READER
 
 /*
  * Implementation of the "sqlite3_xlock()" SQL function.
@@ -493,12 +495,14 @@ int sqlite3_sqliteextension_init( // default name is sqlite3_extension_init
       SQLITE_UTF8 | SQLITE_DIRECTONLY,
       NULL, sqlite3_check_reserved_lock_func, NULL, NULL);
   }
+#ifdef SQLITE_FCNTL_EXTERNAL_READER
   if (rc == SQLITE_OK)
   {
     rc = sqlite3_create_function(db, "sqlite3_external_reader", 1, 
       SQLITE_UTF8 | SQLITE_DIRECTONLY,
       NULL, sqlite3_external_reader_func, NULL, NULL);
   }
+#endif
   if (rc == SQLITE_OK)
   {
     rc = sqlite3_create_function(db, "sqlite3_xlock", 2,

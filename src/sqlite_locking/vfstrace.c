@@ -703,8 +703,12 @@ static int vfstraceFileControl(sqlite3_file *pFile, int op, void *pArg){
     case SQLITE_FCNTL_CKPT_DONE:           zOp = "CKPT_DONE";           break;
     case SQLITE_FCNTL_RESERVE_BYTES:       zOp = "RESERVED_BYTES";      break;
     case SQLITE_FCNTL_CKPT_START:          zOp = "CKPT_START";          break;
+#ifdef SQLITE_FCNTL_EXTERNAL_READER
     case SQLITE_FCNTL_EXTERNAL_READER:     zOp = "EXTERNAL_READER";     break;
+#endif
+#ifdef SQLITE_FCNTL_CKSM_FILE
     case SQLITE_FCNTL_CKSM_FILE:           zOp = "CKSM_FILE";           break;
+#endif
 #ifdef SQLITE_FCNTL_RESET_CACHE
     case SQLITE_FCNTL_RESET_CACHE:         zOp = "RESET_CACHE";         break;
 #endif

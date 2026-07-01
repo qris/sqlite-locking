@@ -238,6 +238,16 @@ def test_sqlite3_normalized_sql(db_extension):
     assert get_sqlite3_normalized_sql("SELECT 'COMMIT';") == "SELECT 'COMMIT'"
 
 
+def _db_opener_fn(db_path, running_event):
+    """Opens the database exclusively and keeps it open for a while."""
+    with sqlite3.connect(db_path) as db:
+        logger.debug("Locking database file")
+        db.execute("BEGIN EXCLUSIVE")
+        running_event.set()
+        time.sleep(120)
+        logger.debug("Unlocking database file")
+
+
 @pytest.mark.parametrize("wal_mode", [False, True])
 def test_sqlite3_check_reserved_lock_multiprocess(wal_mode, db_extension, db_path):
     """
@@ -261,23 +271,18 @@ def test_sqlite3_check_reserved_lock_multiprocess(wal_mode, db_extension, db_pat
         with closing(db.execute("select sqlite3_check_reserved_lock(:schema)", {"schema": schema})) as cursor:
             return one(one(cursor.fetchall()))
 
-    assert not get_external_reader(), "should be no external reader yet"
+    try:
+        assert not get_external_reader(), "should be no external reader yet"
+    except sqlite3.OperationalError:
+        pass  # requires OS with SQLite >= 3.45, so maybe it wasn't compiled in?
+
     assert not get_reserved_lock(), "should be no reserved lock yet"
 
     # To synchronize with our worker process:
     running_event = Event()
 
     # Start another process to open the database exclusively for a while:
-    def db_opener_fn():
-        """Opens the database exclusively and keeps it open for a while."""
-        with sqlite3.connect(db_path) as db:
-            logger.debug("Locking database file")
-            db.execute("BEGIN EXCLUSIVE")
-            running_event.set()
-            time.sleep(120)
-            logger.debug("Unlocking database file")
-
-    db_opener_worker = Process(target=db_opener_fn)
+    db_opener_worker = Process(target=_db_opener_fn, args=(db_path, running_event))
     db_opener_worker.start()
     try:
         assert running_event.wait(5), "db_opener_fn did not open the database in time"
@@ -287,11 +292,20 @@ def test_sqlite3_check_reserved_lock_multiprocess(wal_mode, db_extension, db_pat
         with pytest.raises(sqlite3.OperationalError):
             db.execute("BEGIN EXCLUSIVE")
 
-        assert not get_external_reader() == (not wal_mode), "should be no external reader in WAL mode"
+        try:
+            assert not get_external_reader() == (not wal_mode), "should be no external reader in WAL mode"
+        except sqlite3.OperationalError:
+            pass  # requires OS with SQLite >= 3.45, so maybe it wasn't compiled in?
+
         assert get_reserved_lock() == (not wal_mode), "should not be RESERVED in WAL mode"
         db_opener_worker.terminate()
         db_opener_worker.join()
-        assert not get_external_reader(), "should be no external reader any more"
+
+        try:
+            assert not get_external_reader(), "should be no external reader any more"
+        except sqlite3.OperationalError:
+            pass  # requires OS with SQLite >= 3.45, so maybe it wasn't compiled in?
+
         assert not get_reserved_lock(), "should still not be RESERVED"
     finally:
         db_opener_worker.terminate()
