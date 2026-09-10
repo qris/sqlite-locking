@@ -24,7 +24,8 @@ and some SQLite constants:
 * sqlite3_txn_state: as above.
 * sqlite3_enable_load_extension: replacement for
   [`sqlite3.Connection.enable_load_extension`](https://docs.python.org/3/library/sqlite3.html#sqlite3.Connection.enable_load_extension),
-  which is not available in older Python versions.
+  which is not available in older Python versions (not supported on Mac OS X, as
+  Apple have [disabled it](https://bugs.python.org/issue44997#msg400366)).
 * sqlite3_wal_checkpoint_v2: calls the native function.
 * sqlite3_db_status: calls the native function.
 * sqlite3_errstr: calls the native function.
@@ -49,6 +50,11 @@ corrupting your database. The best way to see how to use them is to look at the
 In most cases, they are functions that you could call directly if you were using
 the C API to SQLite, but you can't because you're using the Python `sqlite3`
 module which exposes a much more restricted interface.
+
+It also contains (very slightly modified) compiled copies of the
+[vfsstat](https://github.com/sqlite/sqlite/blob/master/ext/misc/vfsstat.c) and
+[vfstrace](https://github.com/sqlite/sqlite/blob/master/ext/misc/vfstrace.c)
+example VFSes, which are useful for testing your code (and this module), and
 
 This code was developed to help investigate and solve a
 SQLite locking issue, which turned out to be caused by excessive WAL backfilling

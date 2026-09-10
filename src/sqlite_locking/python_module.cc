@@ -19,6 +19,9 @@ int sqlite3_txn_state_wrapper(py::handle connection, char *p_schema)
     return sqlite3_txn_state(self->db, p_schema);
 }
 
+#ifndef __APPLE__
+// MacOS built-in version of SQLite3 does not support loadable extensions,
+// so this wrapper cannot be compiled on it.
 int sqlite3_enable_load_extension_wrapper(py::handle connection, int onoff)
 {
     /*
@@ -32,6 +35,7 @@ int sqlite3_enable_load_extension_wrapper(py::handle connection, int onoff)
     pysqlite_Connection *self = (pysqlite_Connection *)(connection.ptr());
     return sqlite3_enable_load_extension(self->db, onoff);
 }
+#endif // !__APPLE__
 
 py::tuple sqlite3_wal_checkpoint_v2_wrapper(
     py::handle connection, /* Database handle */
@@ -513,9 +517,11 @@ PYBIND11_MODULE(python_module, m)
               "debugging."; // optional module docstring
     m.def("sqlite3_txn_state", &sqlite3_txn_state_wrapper,
         "Call the sqlite3_txn_state native function");
+#ifndef __APPLE__
     m.def("sqlite3_enable_load_extension",
         &sqlite3_enable_load_extension_wrapper,
         "Call the sqlite3_enable_load_extension native function");
+#endif // !__APPLE__
     m.def("sqlite3_wal_checkpoint_v2", &sqlite3_wal_checkpoint_v2_wrapper,
         "Call the sqlite3_wal_checkpoint_v2 native function");
     m.def("sqlite3_db_status", &sqlite3_db_status_wrapper,

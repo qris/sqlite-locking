@@ -816,9 +816,12 @@ int sqlite3_vfsstat_init(
   rc = sqlite3_vfs_register(&vstat_vfs.base, 0);  // changed to not make it the default
   if( rc==SQLITE_OK ){
     rc = vstatRegister(db, pzErrMsg, pApi);
+    // sqlite3_auto_extension is not supported on Mac OSX:
+    #ifndef __APPLE__
     if( rc==SQLITE_OK ){
       rc = sqlite3_auto_extension((void(*)(void))vstatRegister);
     }
+    #endif // !__APPLE__
   }
   if( rc==SQLITE_OK ) rc = SQLITE_OK_LOAD_PERMANENTLY;
   return rc;

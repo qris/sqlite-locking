@@ -9,17 +9,26 @@ on:
   pull_request:
     branches: [ "main" ]
 
-env:
-  C_AND_CXX_FLAGS: -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Werror
-
 jobs:
   build:
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12"]
-
+        include:
+          - os: macos-latest
+            extra_cflags: -Wno-tautological-pointer-compare
+    runs-on: ${{ matrix.os }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: 12.0
+      C_AND_CXX_FLAGS: |
+        -Wall
+        -Wextra
+        -Wno-unused-parameter
+        -Wno-missing-field-initializers
+        -Werror
+        ${{ matrix.extra_cflags }}
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -31,9 +40,13 @@ jobs:
         python -m pip install pdm
         CFLAGS="$C_AND_CXX_FLAGS" CXXFLAGS="$C_AND_CXX_FLAGS" pdm install
         pdm add pytest
-        ls -la /home/runner/work/sqlite-locking/sqlite-locking
-        ls -la /home/runner/work/sqlite-locking/sqlite-locking/.venv
-        ls -la /home/runner/work/sqlite-locking/sqlite-locking/.venv/bin
+    - name: Dump build logs
+      if: always()
+      run: |
+        ls -la ~runner/work/sqlite-locking/sqlite-locking
+        ls -la ~runner/work/sqlite-locking/sqlite-locking/.venv
+        ls -la ~runner/work/sqlite-locking/sqlite-locking/.venv/bin
+        cat ~runner/Library/Logs/pdm/pdm-install-*.log || true
     - name: Lint with Ruff
       run: |
         # stop the build if there are Python syntax errors or undefined names
